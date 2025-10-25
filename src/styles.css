@@ -1,0 +1,34 @@
+/* Estilos do editor de proposta PDF A4 */
+
+.pdf-root {
+  font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", "Liberation Sans", sans-serif;
+  color: #111827; /* gray-900 */
+}
+
+.pdf-page {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1);
+  border: 1px solid #e5e7eb; /* gray-200 */
+}
+
+.pdf-page * {
+  /* Base 11pt */
+  font-size: 11pt;
+}
+
+.pdf-editable {
+  outline: none;
+  white-space: pre-wrap;
+}
+
+/* Ajuda visual opcional para margens
+.pdf-page::after {
+  content: "";
+  position: absolute;
+  left: calc(20mm);
+  top: calc(20mm);
+  right: calc(20mm);
+  bottom: calc(15mm);
+  border: 1px dashed rgba(59,130,246,0.35);
+  pointer-events: none;
+}
+*/

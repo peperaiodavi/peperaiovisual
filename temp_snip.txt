@@ -1,0 +1,220 @@
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+    }
+
+    return { contentStart };
+  };
+
+  /* ===================== PDF ===================== */
+  const gerarPDF = async () => {
+    try {
+      setIsGenerating(true);
+      // carregar jspdf dinamicamente apenas quando o usuário solicitar a geração
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      const H = doc.internal.pageSize.getHeight();
+      const M = PAGE.M;
+
+      /* === PÁGINA 1 === */
+      const head1 = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: true, showTitle: true });
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+
+      // Corpo — centralizar verticalmente o bloco quando couber
+      const corpoLines = doc.splitTextToSize(CORPO_CARTA_FIXO.trim(), PAGE.BLOCK_W).length;
+      let y = computeVerticalStart(doc, head1.contentStart, corpoLines);
+      y = writeLeftBlock(doc, CORPO_CARTA_FIXO.trim(), y, PAGE.LINE);
+
+      // Assinatura à esquerda dentro do bloco, colada ao rodapé
+      const assinaturaLinhas = doc.splitTextToSize(ASSINATURA_CARTA_FIXA.trim(), PAGE.BLOCK_W);
+      const assinaturaAltura = assinaturaLinhas.length * PAGE.LINE;
+      const yAssinaturaInicio = H - PAGE.BOTTOM - assinaturaAltura;
+
+      doc.text('Atenciosamente,', blockX(doc), yAssinaturaInicio - 12);
+      assinaturaLinhas.forEach((l: string, idx: number) => {
+        doc.text(l, blockX(doc), yAssinaturaInicio + idx * PAGE.LINE);
+      });
+
+      /* === PÁGINA 2: Índice === */
+      doc.addPage();
+      const head2 = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: false, showTitle: false });
+      doc.setFont('helvetica','bold'); doc.setFontSize(16);
+      const indexItems = [
+        '1 – ESCOPO DE FORNECIMENTO',
+        '2 – EXCLUSÕES / LISTA DE DESVIOS',
+        '3 – NOTAS TÉCNICAS',
+        '4 – PREÇOS',
+        '5 – CONDIÇÕES GERAIS DE VENDAS',
+        '6 – TERMO DE GARANTIA DE PRODUTOS ENGENHEIRADOS'
+      ];
+      // calcular altura total do índice para centralizar verticalmente, se couber
+      const indexLines = indexItems.reduce((acc, s) => acc + doc.splitTextToSize(s, PAGE.BLOCK_W).length, 0) + 2; // +2 para título espacamento
+      let y2 = computeVerticalStart(doc, head2.contentStart, indexLines);
+      doc.text('Conteúdo!', blockX(doc), y2); y2 += 26;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      indexItems.forEach((s) => { y2 = writeLeftBlock(doc, s, y2, 18); });
+
+      /* === PÁGINA 3: ESCOPO (EDITÁVEL) === */
+      doc.addPage();
+      const head3 = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: false, showTitle: false });
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      const escopoItems = [
+        `Descrição do Serviço:\n${formData.descricao_servico || '_________________________'}`,
+        `Dimensões:\n${formData.dimensoes || '_________________________'}`,
+        `Composição e Materiais:\n${formData.materiais || '_________________________'}`,
+        `Cores definidas:\n${formData.cores || '_________________________'}`,
+        `Prazo de Execução:\n${formData.prazo_execucao || '_________________________'}`
+      ];
+      const escopoLines = escopoItems.reduce((acc, s) => acc + doc.splitTextToSize(s, PAGE.BLOCK_W).length, 0) + 1; // +1 for title
+      let y3 = computeVerticalStart(doc, head3.contentStart, escopoLines);
+      doc.text('1 – ESCOPO DE FORNECIMENTO', blockX(doc), y3); y3 += 22;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+
+      const escopoBlocos = [
+        ['Descrição do Serviço:', formData.descricao_servico || '_________________________'],
+        ['Dimensões:', formData.dimensoes || '_________________________'],
+        ['Composição e Materiais:', formData.materiais || '_________________________'],
+        ['Cores definidas:', formData.cores || '_________________________'],
+        ['Prazo de Execução:', formData.prazo_execucao || '_________________________']
+      ];
+
+      escopoBlocos.forEach(([t, v]) => {
+        y3 = ensureSpace(doc, y3, PAGE.LINE * 3, dataEmissao);
+        y3 = writeLeftBlock(doc, `${t}\n${v}`, y3, PAGE.LINE);
+        y3 += 6;
+      });
+
+      /* === PÁGINA 4: EXCLUSÕES + NOTAS (FIXO) === */
+      doc.addPage();
+      const head4 = drawHeaderWithHeader = null; // placeholder to keep structure
+      const head4Actual = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: false, showTitle: false });
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      // calculate lines for exclusions+notes to attempt vertical centering
+      const exclLines = EXCLUSOES_FIXAS.reduce((a, t) => a + doc.splitTextToSize(`• ${t}`, PAGE.BLOCK_W).length, 0);
+      const notasLines = NOTAS_TECNICAS_FIXAS.reduce((a, t) => a + doc.splitTextToSize(`• ${t}`, PAGE.BLOCK_W).length, 0);
+      const totalLines4 = exclLines + notasLines + 2; // titles
+      let y4 = computeVerticalStart(doc, head4Actual.contentStart, totalLines4);
+      doc.text('2 – EXCLUSÕES / LISTA DE DESVIOS', blockX(doc), y4); y4 += 20;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      EXCLUSOES_FIXAS.forEach((t) => {
+        y4 = ensureSpace(doc, y4, PAGE.LINE * 2, dataEmissao);
+        y4 = writeLeftBlock(doc, `• ${t}`, y4, PAGE.LINE);
+      });
+
+      y4 += 12;
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text('3 – NOTAS TÉCNICAS', blockX(doc), y4); y4 += 20;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      NOTAS_TECNICAS_FIXAS.forEach((t) => {
+        y4 = ensureSpace(doc, y4, PAGE.LINE * 2, dataEmissao);
+        y4 = writeLeftBlock(doc, `• ${t}`, y4, PAGE.LINE);
+      });
+
+      /* === PÁGINA 5: PREÇOS (EDITÁVEL) + CONDIÇÕES === */
+      doc.addPage();
+      const head5 = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: false, showTitle: false });
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      const precoHeader = '4 – PREÇOS';
+      // compute lines for prices section (items + lines)
+      const itemLines = formData.items.reduce((a, it) => {
+        if (!it.descricao && !it.valor_total && !it.qtde && !it.valor_unitario) return a;
+        return a + doc.splitTextToSize(`${it.descricao || '-'} | ${it.qtde || '-'} | ${it.valor_unitario || '-'} | ${it.valor_total || '-'}`, PAGE.BLOCK_W).length;
+      }, 0);
+      const otherLines = 3; // header + totals
+      const totalPrecoLines = itemLines + otherLines;
+      let y5 = computeVerticalStart(doc, head5.contentStart, totalPrecoLines);
+      doc.text(precoHeader, blockX(doc), y5); y5 += 18;
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      doc.text('DESCRIÇÃO | QTDE | VL. UNIT. | VL. TOTAL', blockX(doc), y5); y5 += 16;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+
+      formData.items.forEach((it) => {
+        if (!it.descricao && !it.valor_total && !it.qtde && !it.valor_unitario) return;
+        y5 = ensureSpace(doc, y5, 14, dataEmissao);
+        y5 = writeLeftBlock(
+          doc,
+          `${it.descricao || '-'} | ${it.qtde || '-'} | ${it.valor_unitario || '-'} | ${it.valor_total || '-'}`,
+          y5,
+          14
+        );
+      });
+
+      y5 += 10;
+      doc.setFont('helvetica','bold');
+      y5 = ensureSpace(doc, y5, 16, dataEmissao);
+      y5 = writeLeftBlock(doc, `Importa a presente proposta o valor final total de ${formData.valor_total_servico || 'R$ 0,00'}`, y5, 16);
+
+      doc.setFont('helvetica','normal');
+      y5 = ensureSpace(doc, y5, 16, dataEmissao);
+      y5 = writeLeftBlock(doc, `Pagamento: ${formData.condicoes_pagamento || '__________'}`, y5, 16);
+
+      y5 += 8;
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text('5 – CONDIÇÕES GERAIS DE VENDA', blockX(doc), y5); y5 += 18;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      CONDICOES_GERAIS_FIXAS(dataEmissao).forEach((t) => {
+        y5 = ensureSpace(doc, y5, PAGE.LINE * 2, dataEmissao);
+        y5 = writeLeftBlock(doc, `• ${t}`, y5, PAGE.LINE);
+      });
+
+      /* === PÁGINAS 6..: GARANTIA (FIXO) === */
+      doc.addPage();
+      let head6 = drawHeaderLikeModel(doc, W, M, dataEmissao, { showMeta: false, showTitle: false });
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      const garantiaLinesCount = GARANTIA_FIXA.reduce((a, t) => a + doc.splitTextToSize(t, PAGE.BLOCK_W).length, 0) + 1;
+      let y6 = computeVerticalStart(doc, head6.contentStart, garantiaLinesCount);
+      doc.text('6 – TERMO DE GARANTIA PRODUTOS ENGENHEIRADOS', blockX(doc), y6); y6 += 20;
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+
+      GARANTIA_FIXA.forEach((t) => {
+        const lines = doc.splitTextToSize(t, PAGE.BLOCK_W);
+        lines.forEach((l: string) => {
+          y6 = ensureSpace(doc, y6, PAGE.LINE, dataEmissao);
+          doc.text(l, blockX(doc), y6);
+          y6 += PAGE.LINE;
+        });
+      });
+
+      // rodapé final (centralizado abaixo do bloco)
+      y = doc.internal.pageSize.getHeight() - 40;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.text('PEPERAIO COMUNICAÇÃO VISUAL  •  Isaac Peperaio 62 98427-4856  •  Marcos Peperaio 61 98196-6308', W / 2, y, { align: 'center' });
+
+      // Nome do arquivo
+      const nomeArquivo = (formData.para && formData.para.trim().length > 0)
+        ? `Proposta ${formData.para.trim()}.pdf`
+        : 'Proposta Peperaio.pdf';
+
+      doc.save(nomeArquivo);
+      toast.success('PDF gerado com sucesso!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao gerar PDF');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  /* ===================== UI (Pré-visualização fiel) ===================== */
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl mb-1">Automação de Documentos (PDF)</h1>
+        <p className="text-[#626262]">Gere propostas automáticas mantendo o modelo padrão</p>
+      </div>
+
+      <Tabs defaultValue="formulario" className="w-full">
+        <TabsList className="bg-white rounded-xl p-1 shadow-sm">
+          <TabsTrigger value="formulario" className="rounded-lg data-[state=active]:bg-[#4F6139] data-[state=active]:text-white">
+            Formulário de Preenchimento
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="rounded-lg data-[state=active]:bg-[#4F6139] data-[state=active]:text-white">
+            Pré-visualização
+          </TabsTrigger>
+        </TabsList>
+
+        {/* FORMULÁRIO */}
+        <TabsContent value="formulario">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
+
+            {/* PARA */}
