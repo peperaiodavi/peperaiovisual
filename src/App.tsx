@@ -4,8 +4,6 @@ import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
-import { Clientes } from './components/Clientes';
-import { Fornecedores } from './components/Fornecedores';
 import { Funcionarios } from './components/Funcionarios';
 import { Equipes } from './components/Equipes';
 import { ControleFinanceiro } from './components/ControleFinanceiro';
@@ -37,10 +35,7 @@ export default function App() {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard />;
-      case 'clientes':
-        return <Clientes />;
-      case 'fornecedores':
-        return <Fornecedores />;
+      
       case 'funcionarios':
         return <Funcionarios />;
       case 'equipes':

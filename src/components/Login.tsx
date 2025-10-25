@@ -61,13 +61,14 @@ export function Login() {
       >
         <div className="bg-white rounded-[20px] shadow-[0_10px_40px_rgba(0,0,0,0.1)] p-8 md:p-10">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-[#4F6139] rounded-full flex items-center justify-center mx-auto mb-4">
-              {avatarPreview ? (
-                <img src={avatarPreview} alt="avatar" className="w-16 h-16 rounded-full object-cover" />
-              ) : (
-                <span className="text-2xl text-white">P</span>
-              )}
-            </div>
+            <img
+              src="/logo2.png"
+              alt="Logo Peperaio"
+              className="w-16 h-16 object-contain mx-auto mb-4 rounded-full bg-white shadow-sm"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/Logo.png';
+              }}
+            />
             <h1 className="text-2xl mb-2 text-[#2C2C2C]">Peperaio Comunicação Visual</h1>
             <p className="text-[#626262]">Bem-vindo à gestão da Peperaio</p>
           </div>

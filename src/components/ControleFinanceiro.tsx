@@ -603,9 +603,6 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
           <TabsTrigger value="caixa" className="rounded-lg data-[state=active]:bg-[#4F6139] data-[state=active]:text-white">
             Caixa
           </TabsTrigger>
-          <TabsTrigger value="parceladas" className="rounded-lg data-[state=active]:bg-[#4F6139] data-[state=active]:text-white">
-            Parceladas
-          </TabsTrigger>
           <TabsTrigger value="dividas" className="rounded-lg data-[state=active]:bg-[#4F6139] data-[state=active]:text-white">
             Dívidas
           </TabsTrigger>
@@ -729,7 +726,16 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Label>A Receber</Label>
-                  <Button onClick={() => setDialogReceber(true)} className="bg-[#4F6139] hover:bg-[#3e4d2d] text-white rounded-xl"><Plus className="h-4 w-4 mr-2" /> Novo</Button>
+                  <Button
+                    onClick={() => {
+                      setEditingReceberId(null);
+                      setReceberForm({ nome: '', valor: '', telefone: '', dataPrevista: modoLanc === 'diario' ? selectedDate : '', obraId: '' });
+                      setDialogReceber(true);
+                    }}
+                    className="bg-[#4F6139] hover:bg-[#3e4d2d] text-white rounded-xl"
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> Novo
+                  </Button>
                   <Button
                     variant="ghost"
                     onClick={() => {
@@ -1397,157 +1403,7 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
           </motion.div>
         </TabsContent>
 
-        {/* PARCELADAS */}
-        <TabsContent value="parceladas">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
-            <div className="flex justify-end">
-              <Dialog
-                open={dialogParcelada}
-                onOpenChange={(open: boolean) => {
-                  setDialogParcelada(open);
-                  if (!open) {
-                    setEditingParceladaId(null);
-                    setParceladaForm({ descricao: '', fornecedor: '', parcelaAtual: '', totalParcelas: '', valorParcela: '', valorTotal: '', vencimento: '' });
-                  }
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button
-                    onClick={() => {
-                      setEditingParceladaId(null);
-                      setParceladaForm({ descricao: '', fornecedor: '', parcelaAtual: '', totalParcelas: '', valorParcela: '', valorTotal: '', vencimento: '' });
-                    }}
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive h-9 px-4 py-2 has-[>svg]:px-3 bg-[#4F6139] hover:bg-[#3e4d2d] text-white rounded-xl"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Nova Compra Parcelada
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="rounded-[20px]">
-                  <DialogHeader>
-                    <DialogTitle>{editingParceladaId ? 'Editar Compra Parcelada' : 'Nova Compra Parcelada'}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Descrição</Label>
-                      <Input className="rounded-xl" value={parceladaForm.descricao} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, descricao: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Fornecedor</Label>
-                      <Input className="rounded-xl" value={parceladaForm.fornecedor} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, fornecedor: e.target.value })} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Parcela Atual</Label>
-                        <Input type="number" className="rounded-xl" value={parceladaForm.parcelaAtual} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, parcelaAtual: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label>Total de Parcelas</Label>
-                        <Input type="number" className="rounded-xl" value={parceladaForm.totalParcelas} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, totalParcelas: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Valor da Parcela</Label>
-                        <Input type="number" className="rounded-xl" value={parceladaForm.valorParcela} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, valorParcela: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label>Valor Total</Label>
-                        <Input type="number" className="rounded-xl" value={parceladaForm.valorTotal} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, valorTotal: e.target.value })} />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Vencimento</Label>
-                      <Input className="rounded-xl" placeholder="DD/MM/AAAA" value={parceladaForm.vencimento} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParceladaForm({ ...parceladaForm, vencimento: e.target.value })} />
-                    </div>
-                    <Button onClick={editingParceladaId ? handleUpdateParcelada : handleAddParcelada} className="w-full bg-[#4F6139] hover:bg-[#3e4d2d] rounded-xl">
-                      {editingParceladaId ? 'Salvar alterações' : 'Cadastrar'}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            <div className="grid gap-4">
-              {parceladas.map((p) => (
-                <Card
-                  key={p.id}
-                  onClick={() => setExpandedParceladas(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
-                  className="p-6 bg-white rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.05)] cursor-pointer"
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3>{p.descricao}</h3>
-                        <Badge className={p.pago ? 'bg-[#9DBF7B]' : 'bg-[#B64B3A]'}>
-                          {p.pago ? 'Pago' : 'Pendente'}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-[#626262]">Fornecedor: {p.fornecedor}</p>
-                      <p className="text-sm text-[#626262]">
-                        Parcela atual: {p.parcelaAtual}/{p.totalParcelas} • Vencimento: {p.vencimento}
-                      </p>
-                      <p className="text-[#2C2C2C] mt-2">
-                        R$ {p.valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / parcela
-                      </p>
-                      <p className="text-sm text-[#626262]">
-                        Total: R$ {p.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); togglePagamentoParcelada(p.id); }}
-                        size="icon"
-                        className={`rounded-xl ${p.pago ? 'bg-[#9DBF7B] hover:bg-[#8aae6a]' : 'bg-[#B64B3A] hover:bg-[#a53d2d]'}`}
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); startEditParcelada(p); }} className="hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); handleDeleteParcelada(p.id); }}
-                        className="hover:bg-[#B64B3A]/10 hover:text-[#B64B3A] transition-all"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  {expandedParceladas[p.id] && (
-                    <div className="mt-4 grid gap-2">
-                      {Array.from({ length: Number(p.totalParcelas) || 0 }).map((_, idx) => {
-                        const numero = idx + 1;
-                        const isPaid = numero < Number(p.parcelaAtual) || (p.pago && numero === Number(p.parcelaAtual));
-                        return (
-                          <div key={numero} className="text-card-foreground flex items-center justify-between border p-3 bg-white rounded-[16px] shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
-                            <div className="flex items-center gap-2">
-                              {isPaid ? (
-                                <CheckCircle2 className="h-4 w-4 text-[#4F6139]" />
-                              ) : (
-                                <span className="h-4 w-4 rounded-full border border-[#4F6139]/30" />
-                              )}
-                              <span className="text-sm text-[#2C2C2C]">Parcela {numero}/{p.totalParcelas}</span>
-                            </div>
-                            <span className={isPaid ? 'text-[#9DBF7B]' : 'text-[#2C2C2C]'}>
-                              R$ {Number(p.valorParcela).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-              ))}
-            </div>
-          </motion.div>
-        </TabsContent>
+        {/* PARCELADAS - removida conforme solicitação */}
 
         {/* OBRAS (espelha Obras/Equipes) */}
         <TabsContent value="obras">

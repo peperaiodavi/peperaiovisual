@@ -11,15 +11,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
+import { supabase } from '../lib/supabaseClient';
 
-interface Fornecedor {
+type Fornecedor = {
   id: string;
   nome: string;
-  cnpj: string;
-  contato: string;
-  endereco: string;
-  tipo: string;
-}
+  cnpj?: string;
+  contato?: string;
+  endereco?: string;
+  tipo?: string;
+};
 
 interface Material {
   id: string;
@@ -59,35 +60,32 @@ export function Fornecedores() {
   const [compraForm, setCompraForm] = useState({ fornecedor: '', materiais: '', quantidade: '', valor: '', pagamento: '', obra: '', parcela: '' });
 
   useEffect(() => {
-    const storedF = localStorage.getItem('peperaio_fornecedores');
+    // 1) Fornecedores sempre do banco
+    fetchFornecedores();
+
+    // 2) Materiais/Compras: só carrega se existir; não criar seed
     const storedM = localStorage.getItem('peperaio_materiais');
     const storedC = localStorage.getItem('peperaio_compras');
-    
-    if (storedF) setFornecedores(JSON.parse(storedF));
-    else {
-      const initial = [{ id: '1', nome: 'ACM Materiais', cnpj: '11.222.333/0001-44', contato: '(11) 3333-4444', endereco: 'Rua A, 123', tipo: 'ACM' }];
-      setFornecedores(initial);
-      localStorage.setItem('peperaio_fornecedores', JSON.stringify(initial));
-    }
-    
-    if (storedM) setMateriais(JSON.parse(storedM));
-    else {
-      const initial = [{ id: '1', nome: 'ACM Alumínio', fornecedor: 'ACM Materiais', unidade: 'm²', categoria: 'Revestimento', preco: 'R$ 90,00' }];
-      setMateriais(initial);
-      localStorage.setItem('peperaio_materiais', JSON.stringify(initial));
-    }
-    
-    if (storedC) setCompras(JSON.parse(storedC));
-    else {
-      const initial = [{ id: '1', fornecedor: 'ACM Materiais', materiais: 'ACM Alumínio', quantidade: '50m²', valor: 'R$ 4.500,00', pagamento: '3x', obra: 'Shopping Center', parcela: '1/3', pago: false }];
-      setCompras(initial);
-      localStorage.setItem('peperaio_compras', JSON.stringify(initial));
-    }
+
+    setMateriais(storedM ? JSON.parse(storedM) : []);
+    setCompras(storedC ? JSON.parse(storedC) : []);
   }, []);
 
-  useEffect(() => {
-    if (fornecedores.length > 0) localStorage.setItem('peperaio_fornecedores', JSON.stringify(fornecedores));
-  }, [fornecedores]);
+  // Busca atualizada no banco (Supabase)
+  const fetchFornecedores = async () => {
+    const { data, error } = await supabase
+      .from('fornecedores')
+      .select('id,nome,cnpj,contato,endereco,tipo')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[fornecedores] erro ao buscar:', error);
+      return; // mantém estado atual se falhar
+    }
+    setFornecedores((data as any) || []);
+  };
+
+  // Removido: fornecedores agora vêm do Supabase
 
   useEffect(() => {
     if (materiais.length > 0) localStorage.setItem('peperaio_materiais', JSON.stringify(materiais));
@@ -97,9 +95,24 @@ export function Fornecedores() {
     if (compras.length > 0) localStorage.setItem('peperaio_compras', JSON.stringify(compras));
   }, [compras]);
 
-  const handleAddFornecedor = () => {
+  const handleAddFornecedor = async () => {
     if (!fornecedorForm.nome) return;
-    setFornecedores([...fornecedores, { ...fornecedorForm, id: Date.now().toString() }]);
+    const { data, error } = await supabase
+      .from('fornecedores')
+      .insert({
+        nome: fornecedorForm.nome,
+        cnpj: fornecedorForm.cnpj || null,
+        contato: fornecedorForm.contato || null,
+        endereco: fornecedorForm.endereco || null,
+        tipo: fornecedorForm.tipo || null,
+      })
+      .select('id,nome,cnpj,contato,endereco,tipo')
+      .single();
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await fetchFornecedores();
     setFornecedorForm({ nome: '', cnpj: '', contato: '', endereco: '', tipo: '' });
     setDialogFornecedor(false);
     toast.success('Fornecedor adicionado!');
@@ -109,30 +122,46 @@ export function Fornecedores() {
     setEditingFornecedorId(f.id);
     setFornecedorForm({
       nome: f.nome,
-      cnpj: f.cnpj,
-      contato: f.contato,
-      endereco: f.endereco,
-      tipo: f.tipo,
+      cnpj: f.cnpj ?? '',
+      contato: f.contato ?? '',
+      endereco: f.endereco ?? '',
+      tipo: f.tipo ?? '',
     });
     setDialogFornecedor(true);
   };
 
-  const handleUpdateFornecedor = () => {
+  const isUUID = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+
+  const handleUpdateFornecedor = async () => {
     if (!editingFornecedorId) return;
+    if (!isUUID(editingFornecedorId)) { alert(`ID inválido: ${editingFornecedorId}`); return; }
     if (!fornecedorForm.nome) return;
-    setFornecedores(
-      fornecedores.map((f) =>
-        f.id === editingFornecedorId ? { ...f, ...fornecedorForm } : f
-      )
-    );
+    const { error } = await supabase
+      .from('fornecedores')
+      .update({
+        nome: fornecedorForm.nome,
+        cnpj: fornecedorForm.cnpj || null,
+        contato: fornecedorForm.contato || null,
+        endereco: fornecedorForm.endereco || null,
+        tipo: fornecedorForm.tipo || null,
+      })
+      .eq('id', editingFornecedorId);
+    if (error) { alert(`Não foi possível atualizar: ${error.message}`); return; }
+    await fetchFornecedores();
     setEditingFornecedorId(null);
     setFornecedorForm({ nome: '', cnpj: '', contato: '', endereco: '', tipo: '' });
     setDialogFornecedor(false);
     toast.success('Fornecedor atualizado!');
   };
 
-  const handleDeleteFornecedor = (id: string) => {
-    setFornecedores(fornecedores.filter(f => f.id !== id));
+  const handleDeleteFornecedor = async (id: string) => {
+    if (!isUUID(id)) { alert(`ID inválido: ${id}`); return; }
+    const { error } = await supabase
+      .from('fornecedores')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { alert(`Não foi possível excluir: ${error.message}`); return; }
+    await fetchFornecedores();
     toast.success('Fornecedor removido!');
   };
 

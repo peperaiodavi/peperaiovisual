@@ -19,7 +19,14 @@ type Props = {
 
 export function RecebivelDialog({ open, onOpenChange, editingId, form, setForm, onSave }: Props) {
   const { obras } = useObras();
-  const equipesOptions = equipesObrasOptions();
+  const equipesOptions = (() => {
+    try {
+      const arr = equipesObrasOptions();
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [] as Array<{ id: string; label: string }>;
+    }
+  })();
   return (
     <Dialog open={open} onOpenChange={(openState: boolean) => { onOpenChange(openState); if (!openState) { /* parent clears */ } }}>
       <DialogContent className="rounded-[20px]">
@@ -48,21 +55,27 @@ export function RecebivelDialog({ open, onOpenChange, editingId, form, setForm, 
             <Label>Relacionar à obra (opcional)</Label>
             <Select
               value={form.obraId}
-              onValueChange={(v: string) => setForm({ ...form, obraId: v })}
+              onValueChange={(v: string) => setForm({ ...form, obraId: v === '__none' ? '' : v })}
             >
               <SelectTrigger className="rounded-xl">
                 <SelectValue placeholder="Sem obra" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sem obra</SelectItem>
+                <SelectItem value="__none">Sem obra</SelectItem>
                 {/* Opções vindas das obras de Equipes (fonte principal) */}
-                {equipesOptions.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
-                ))}
+                {equipesOptions
+                  .filter((o) => typeof o.id === 'string' && o.id.trim() !== '')
+                  .map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                  ))}
                 {/* Fallback: obras do módulo legado, caso existam */}
-                {equipesOptions.length === 0 && [...obras].sort((a,b)=>a.nome.localeCompare(b.nome)).map(o => (
-                  <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>
-                ))}
+                {equipesOptions.length === 0 && ((obras || [])
+                  .slice()
+                  .filter((o) => typeof o.id === 'string' && o.id.trim() !== '')
+                  .sort((a,b)=>a.nome.localeCompare(b.nome))
+                  .map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>
+                  )))}
               </SelectContent>
             </Select>
           </div>

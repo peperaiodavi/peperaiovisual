@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Camera, Save } from 'lucide-react';
+import { Camera, Save, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
@@ -8,12 +8,14 @@ import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { useAuthCtx } from '../auth';
 import { updateProfile, uploadAvatar } from '../lib/profile';
+import { supabase } from '../lib/supabaseClient';
 
 export function MinhaConta() {
   const { profile, refreshProfile } = useAuthCtx();
   const [name, setName] = useState(profile?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (!profile) {
     return <div className="p-6">Carregando perfil…</div>;
@@ -126,6 +128,27 @@ export function MinhaConta() {
             >
               <Save className="h-5 w-5 mr-2" />
               {saving ? 'Salvando…' : 'Salvar Alterações'}
+            </Button>
+
+            <div className="h-px bg-[#E8E6E0]" />
+
+            <Button
+              onClick={async () => {
+                setLoggingOut(true);
+                try {
+                  await supabase.auth.signOut();
+                  toast.success('Você saiu da conta');
+                } catch (e: any) {
+                  toast.error(e?.message || 'Não foi possível sair');
+                } finally {
+                  setLoggingOut(false);
+                }
+              }}
+              disabled={loggingOut}
+              className="w-full bg-[#B64B3A] hover:bg-[#a24031] text-white rounded-xl h-12 transition-all hover:scale-[1.02] disabled:opacity-60"
+            >
+              <LogOut className="h-5 w-5 mr-2" />
+              {loggingOut ? 'Saindo…' : 'Sair da conta'}
             </Button>
           </div>
         </Card>

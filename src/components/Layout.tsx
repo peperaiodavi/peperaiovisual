@@ -26,8 +26,7 @@ interface LayoutProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Início', icon: Home },
-  { id: 'clientes', label: 'Clientes', icon: Users },
-  { id: 'fornecedores', label: 'Fornecedores', icon: Package },
+  
   { id: 'funcionarios', label: 'Funcionários', icon: UserCog },
   { id: 'equipes', label: 'Obras', icon: UsersRound },
   { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
@@ -54,13 +53,7 @@ export function Layout({ children, currentPage, onNavigate, onLogout }: LayoutPr
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#4F6139] rounded-full flex items-center justify-center">
-              <span className="text-white">P</span>
-            </div>
-            <span className="hidden sm:inline text-[#2C2C2C]">Peperaio</span>
-          </div>
+          {/* Removido: ícone e nome Peperaio no topo esquerdo */}
         </div>
 
         <div className="flex-1 max-w-md mx-4 hidden md:block">
