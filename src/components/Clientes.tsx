@@ -34,6 +34,7 @@ export function Clientes() {
       const { data, error } = await supabase
         .from('clientes')
         .select('*')
+        .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
       if (!error && data) setClientes(data as any);
     })();
@@ -55,7 +56,7 @@ export function Clientes() {
           data: formData.data,
         })
         .eq('id', editingCliente.id)
-        .eq('user_id', user.id);
+        .eq('owner_id', user.id);
       if (!error) {
         setClientes((arr) => arr.map(c => c.id === editingCliente.id ? { ...c, ...formData } as any : c));
         toast.success('Cliente atualizado com sucesso!');
@@ -64,7 +65,7 @@ export function Clientes() {
       const { data, error } = await supabase
         .from('clientes')
         .insert({
-          user_id: user.id,
+          owner_id: user.id,
           nome: formData.nome,
           cnpj: formData.cnpj,
           contato: formData.contato,
@@ -97,7 +98,7 @@ export function Clientes() {
       .from('clientes')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('owner_id', user.id);
     if (!error) {
       setClientes((arr) => arr.filter((c) => c.id !== id));
       toast.success('Cliente removido com sucesso!');

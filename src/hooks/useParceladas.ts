@@ -27,11 +27,14 @@ export function useParceladas() {
     setLoading(true);
     setError(null);
     try {
+      const { data: udata } = await supabase.auth.getUser();
+      const uid = udata?.user?.id;
       const { data, error } = await supabase
         .from('parceladas')
         .select(
           'id, fornecedor_id, descricao, total, qtd_parcelas, valor_parcela, primeira_data, periodicidade, status'
         )
+        .eq('owner_id', uid)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -49,10 +52,13 @@ export function useParceladas() {
       alert(`ID inválido: ${id}`);
       return;
     }
+    const { data: udata } = await supabase.auth.getUser();
+    const uid = udata?.user?.id;
     const { error } = await supabase
       .from('parceladas')
       .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('owner_id', uid);
     if (error) {
       alert(`Não foi possível excluir: ${error.message}`);
       return;
