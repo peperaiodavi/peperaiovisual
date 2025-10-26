@@ -40,11 +40,12 @@ import { RecebivelCard } from './RecebivelCard';
 import { RecebivelDialog } from './RecebivelDialog';
 import { exportToPdf } from '../utils/generatePdf';
 import CardsFinanceiros from '../financeiro/CardsFinanceiros';
-import { useFinanceiro } from '../financeiro/useFinanceiro';
+import { useFinanceiro, ensureFinanceObraId } from '../financeiro/useFinanceiro';
 import { A4_MM } from '../types/pdf';
 import { Require } from './Require';
 
 export function ControleFinanceiro() {
+  // Helpers
   // Store local de financeiro (cartões, lançamentos e obras)
   const { db: finDB, addLancamento: addLancFinanceiro, updateLancamento: updLancFinanceiro, removeLancamento: delLancFinanceiro, getResumoFinanceiro, setSaldoInicial, atualizarObra: finAtualizarObra, clearReceitasPlanejadas } = useFinanceiro();
   // Mês selecionado (YYYY-MM)
@@ -56,13 +57,12 @@ export function ControleFinanceiro() {
   // Obras/Equipes via hook unificado
   const { equipesObras, setEquipesObras } = useEquipesObras();
 
-  // Lista unificada de nomes de obras para selects (Equipes + Obras antigas)
+  // Lista de nomes de obras baseada apenas na fonte Equipes (sem legados)
   const obrasSelect = React.useMemo(() => {
     const names = new Set<string>();
     try { (equipesObras || []).forEach((o) => { if (o?.obra) names.add(o.obra); }); } catch {}
-    try { (obras || []).forEach((o) => { if (o?.nome) names.add(o.nome); }); } catch {}
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [equipesObras, obras]);
+  }, [equipesObras]);
   const [parceladas, setParceladas] = useState<Parcelada[]>([]);
   // Diálogo de ajuste apenas do Saldo em Caixa
   const [dialogSaldoOpen, setDialogSaldoOpen] = useState(false);
@@ -197,10 +197,10 @@ const [dialogReceber, setDialogReceber] = useState(false);
 const [editingReceberId, setEditingReceberId] = useState<string | null>(null);
 const [receberForm, setReceberForm] = useState({ nome: '', valor: '', telefone: '', dataPrevista: '', obraId: '' });
 const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clearReceber } = useReceber({
-  onPayment: (r, amount) => {
+  onPayment: async (r, amount) => {
     // cria lançamento de entrada diretamente no store financeiro
     try {
-      addLancFinanceiro({
+      await addLancFinanceiro({
         id: Date.now().toString(),
         data: new Date().toLocaleDateString('pt-BR'),
         tipo: 'entrada',
@@ -343,7 +343,6 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
     // Remoção apenas reflete a fonte mãe (Equipes) para manter consistência
     setEquipesObras((prev) => {
       const next = prev.filter((o) => o.id !== id);
-      try { localStorage.setItem('peperaio_equipes', JSON.stringify(next)); } catch {}
       return next;
     });
     toast.success('Obra removida!');
@@ -358,7 +357,7 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
     setDialogEditLancamento(true);
   };
 
-  const handleAddLancamento = () => {
+  const handleAddLancamento = async () => {
     if (!lancamentoForm.categoria || !lancamentoForm.valor) return;
     // Define a data do lançamento: usa a informada; senão, se em modo diário usa selectedDate; senão hoje
     const dataEscolhida = lancamentoForm.data && lancamentoForm.data.trim().length > 0
@@ -368,7 +367,7 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
     try {
       const obraNome = (lancamentoForm.obra && lancamentoForm.obra !== '-') ? lancamentoForm.obra : undefined;
       const obraId = obraNome ? (finDB.obras.find(o => o.nome === obraNome)?.id) : undefined;
-      addLancFinanceiro({ id: Date.now().toString(), data: dataPt, tipo: lancamentoForm.tipo as any, valor: Number(lancamentoForm.valor) || 0, descricao: lancamentoForm.categoria, obraId });
+      await addLancFinanceiro({ id: Date.now().toString(), data: dataPt, tipo: lancamentoForm.tipo as any, valor: Number(lancamentoForm.valor) || 0, descricao: lancamentoForm.categoria, obraId });
     } catch {}
     setDialogLancamento(false);
     setEditingLancamentoId(null);
@@ -376,13 +375,13 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
     toast.success('Lançamento adicionado!');
   };
 
-  const handleUpdateLancamento = () => {
+  const handleUpdateLancamento = async () => {
     if (!editingLancamentoId) return;
     if (!lancamentoForm.categoria || !lancamentoForm.valor) return;
     try {
       const obraNome = (lancamentoForm.obra && lancamentoForm.obra !== '-') ? lancamentoForm.obra : undefined;
       const obraId = obraNome ? (finDB.obras.find(o => o.nome === obraNome)?.id) : undefined;
-      updLancFinanceiro(editingLancamentoId, {
+      await updLancFinanceiro(editingLancamentoId, {
         data: lancamentoForm.data,
         tipo: lancamentoForm.tipo as any,
         valor: Number(lancamentoForm.valor) || 0,
@@ -393,15 +392,15 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
     setDialogLancamento(false);
     setEditingLancamentoId(null);
     setLancamentoForm({ data: '', tipo: 'entrada', categoria: '', valor: '', obra: '', status: '' });
-    toast.success('Lan��amento atualizado!');
+  toast.success('Lançamento atualizado!');
   };
 
-  const handleAdicionarMovimentacao = () => {
+  const handleAdicionarMovimentacao = async () => {
     if (!novoValor) return;
     const valor = parseFloat(novoValor);
     // Registrar como lançamento padrão para persistir e refletir nos resumos
     try {
-      addLancFinanceiro({ id: Date.now().toString(), data: new Date().toLocaleDateString('pt-BR'), tipo: (novaTipo === 'entrada' ? 'entrada' : 'saida') as any, valor, descricao: 'Movimentação Caixa' });
+      await addLancFinanceiro({ id: Date.now().toString(), data: new Date().toLocaleDateString('pt-BR'), tipo: (novaTipo === 'entrada' ? 'entrada' : 'saida') as any, valor, descricao: 'Movimentação Caixa' });
     } catch {}
     setNovoValor('');
     toast.success('Movimentação adicionada!');
@@ -487,7 +486,8 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
   };
 
   // Finalizar obra (Equipes) e registrar restante como entrada em Caixa
-  const finalizeObraEquipes = (obra: ObraEquipe) => {
+
+  const finalizeObraEquipes = async (obra: ObraEquipe) => {
     const totalDespesas = (obra.despesas || []).reduce((s, d) => s + (Number(d.valor) || 0), 0);
     const restante = (obra.custos || 0) - totalDespesas;
     // Atualiza status para concluído
@@ -499,20 +499,39 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
       } catch {}
       return next;
     });
-    if (restante > 0) {
-      try {
-        // Registrar somente no novo store financeiro
-        const obraId = finDB.obras.find(o => o.nome === obra.obra)?.id;
-        addLancFinanceiro({
-          tipo: 'entrada',
-          valor: Number(restante) || 0,
-          descricao: `Saldo Obra: ${obra.obra}`,
-          obraId,
-        });
-        if (obraId) finAtualizarObra(obraId, { status: 'finalizada' });
-      } catch (e) { console.error('Falha ao registrar entrada de saldo da obra', e); }
-    }
-    toast.success('Obra finalizada e saldo lançado em Caixa');
+    try {
+      const dataPt = new Date().toLocaleDateString('pt-BR');
+      const finObraId = await ensureFinanceObraId(obra.id, obra.obra);
+      if (restante > 0) {
+        // 1) Entrada no CAIXA (impacta saldo)
+        try {
+          await addLancFinanceiro({
+            id: `${Date.now()}_caixa_final_${obra.id}`,
+            data: dataPt,
+            tipo: 'entrada',
+            valor: Number(restante) || 0,
+            descricao: `Fechamento de Obra - ${obra.obra}`,
+            escopo: 'caixa',
+            contabilizaCaixa: true,
+          } as any);
+        } catch {}
+        // 2) Registro na aba Obras (não impacta saldo)
+        try {
+          await addLancFinanceiro({
+            id: `${Date.now()}_obra_final_${obra.id}`,
+            data: dataPt,
+            tipo: 'entrada',
+            valor: Number(restante) || 0,
+            descricao: `Fechamento de Obra - ${obra.obra}`,
+            obraId: finObraId,
+            escopo: 'obra',
+            contabilizaCaixa: false,
+          } as any);
+        } catch {}
+      }
+      try { await finAtualizarObra(finObraId, { status: 'finalizada', nome: obra.obra }); } catch {}
+    } catch (e) { console.error('Falha ao registrar finalização da obra', e); }
+    toast.success('Obra finalizada: entrada no CAIXA e registro na aba Obras.');
   };
 
   const handleUpdateObra = () => {
@@ -1215,9 +1234,11 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
                       <TableCell>{(lancamento as any).escopo || 'caixa'}</TableCell>
                       <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => startEditLancamento(lancamento)} className="hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <Require roles="admin">
+                            <Button variant="ghost" size="icon" onClick={() => startEditLancamento(lancamento)} className="hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </Require>
                           <Button 
                             variant="ghost" 
                             size="icon" 

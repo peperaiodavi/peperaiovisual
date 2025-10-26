@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { supabase } from '../lib/supabaseClient';
+import { Require } from './Require';
 
 type Fornecedor = {
   id: string;
@@ -371,6 +372,7 @@ export function Fornecedores() {
                       <TableCell>{fornecedor.tipo}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Require roles="admin">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -379,6 +381,7 @@ export function Fornecedores() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          </Require>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -513,6 +516,7 @@ export function Fornecedores() {
                       <TableCell>{material.preco}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Require roles="admin">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -521,6 +525,7 @@ export function Fornecedores() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          </Require>
                           <Button 
                             variant="ghost" 
                             size="icon" 

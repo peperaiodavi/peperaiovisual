@@ -1,1 +1,1 @@
-export { useFinanceiro as default, useFinanceiro, FinanceiroProvider } from './useFinanceiro.tsx';
+export { useFinanceiro as default, useFinanceiro, FinanceiroProvider, ensureFinanceObraId } from './useFinanceiro.tsx';

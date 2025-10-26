@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Plus, DollarSign, Pencil, Trash2 } from 'lucide-react';
+import { Require } from './Require';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -9,6 +10,7 @@ import { Label } from './ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface Funcionario {
   id: string;
@@ -17,6 +19,8 @@ interface Funcionario {
   salario: number;
   vales: number;
   ativo: boolean;
+  categoria?: 'dono' | 'temporario' | 'funcionario';
+  modalidade_pagamento?: 'mensal' | 'diaria';
 }
 
 interface Vale {
@@ -37,20 +41,16 @@ export function Funcionarios() {
   const [selectedFuncionario, setSelectedFuncionario] = useState<Funcionario | null>(null);
   const [editingFuncionarioId, setEditingFuncionarioId] = useState<string | null>(null);
 
-  const [funcionarioForm, setFuncionarioForm] = useState({ nome: '', cargo: '', salario: '' });
+  const [funcionarioForm, setFuncionarioForm] = useState({ nome: '', cargo: '', salario: '', categoria: 'funcionario' as 'dono'|'temporario'|'funcionario' });
   const [valeForm, setValeForm] = useState({ data: '', valor: '', motivo: '' });
-  const [funcionarioEditForm, setFuncionarioEditForm] = useState({ cargo: '', salario: '', vales: '' });
+  const [funcionarioEditForm, setFuncionarioEditForm] = useState({ cargo: '', salario: '', vales: '', categoria: 'funcionario' as 'dono'|'temporario'|'funcionario' });
 
   useEffect(() => {
     const storedF = localStorage.getItem('peperaio_funcionarios');
     const storedV = localStorage.getItem('peperaio_vales');
     if (storedF) setFuncionarios(JSON.parse(storedF));
     else {
-      const initial: Funcionario[] = [
-        { id: '1', nome: 'Joao Silva', cargo: 'Instalador', salario: 3500, vales: 500, ativo: true },
-        { id: '2', nome: 'Maria Santos', cargo: 'Designer', salario: 4200, vales: 0, ativo: true },
-        { id: '3', nome: 'Pedro Costa', cargo: 'Montador', salario: 3200, vales: 300, ativo: true },
-      ];
+      const initial: Funcionario[] = [];
       setFuncionarios(initial);
       localStorage.setItem('peperaio_funcionarios', JSON.stringify(initial));
     }
@@ -88,17 +88,38 @@ export function Funcionarios() {
     }
   }, []);
 
-  const handleAddFuncionario = () => {
-    if (!funcionarioForm.nome || !funcionarioForm.cargo || !funcionarioForm.salario) return;
+  const handleAddFuncionario = async () => {
+    if (!funcionarioForm.nome || !funcionarioForm.cargo) return;
+    if (funcionarioForm.categoria === 'funcionario' && !funcionarioForm.salario) return;
+    if (funcionarioForm.categoria === 'temporario' && !funcionarioForm.salario) return;
     const newFunc: Funcionario = {
       id: Date.now().toString(),
       nome: funcionarioForm.nome,
       cargo: funcionarioForm.cargo,
-      salario: parseFloat(funcionarioForm.salario),
+      salario: funcionarioForm.salario ? parseFloat(funcionarioForm.salario) : 0,
       vales: 0,
       ativo: true,
+      categoria: funcionarioForm.categoria,
+      modalidade_pagamento: funcionarioForm.categoria === 'temporario' ? 'diaria' : 'mensal',
     };
     setFuncionarios([...funcionarios, newFunc]);
+    try {
+      const { supabase } = await import('../lib/supabaseClient');
+      const { data: udata } = await supabase.auth.getUser();
+      const uid = udata?.user?.id;
+      await supabase.from('funcionarios').upsert({
+        id: newFunc.id,
+        owner_id: uid,
+        nome: newFunc.nome,
+        cargo: newFunc.cargo,
+        categoria: newFunc.categoria,
+        modalidade_pagamento: newFunc.modalidade_pagamento,
+        salario: newFunc.salario,
+        vales: newFunc.vales,
+        ativo: newFunc.ativo,
+        deleted_at: null,
+      }, { onConflict: 'id,owner_id' });
+    } catch (e) { console.error('[funcionarios] supabase upsert falhou', e); }
     // Lcto de salario em financas + map
     try {
       const LANC_KEY = 'peperaio_lancamentos';
@@ -121,7 +142,7 @@ export function Funcionarios() {
       map[newFunc.id] = lancamento.id;
       localStorage.setItem(MAP_KEY, JSON.stringify(map));
     } catch {}
-    setFuncionarioForm({ nome: '', cargo: '', salario: '' });
+    setFuncionarioForm({ nome: '', cargo: '', salario: '', categoria: 'funcionario' });
     setDialogFuncionario(false);
     toast.success('Funcionario adicionado!');
   };
@@ -185,9 +206,13 @@ export function Funcionarios() {
     toast.success('Historico de vales limpo!');
   };
 
-  const handleDeleteFuncionario = (id: string) => {
+  const handleDeleteFuncionario = async (id: string) => {
     setFuncionarios(funcionarios.filter(f => f.id !== id));
     if (selectedFuncionario?.id === id) setSelectedFuncionario(null);
+    try {
+      const { supabase } = await import('../lib/supabaseClient');
+      await supabase.from('funcionarios').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    } catch {}
     // remover lcto de salario
     try {
       const LANC_KEY = 'peperaio_lancamentos';
@@ -229,11 +254,11 @@ export function Funcionarios() {
 
   const startEditFuncionario = (f: Funcionario) => {
     setEditingFuncionarioId(f.id);
-    setFuncionarioEditForm({ cargo: f.cargo, salario: String(f.salario), vales: String(f.vales) });
+    setFuncionarioEditForm({ cargo: f.cargo, salario: String(f.salario), vales: String(f.vales), categoria: f.categoria || 'funcionario' });
     setDialogEditFuncionario(true);
   };
 
-  const handleUpdateFuncionario = () => {
+  const handleUpdateFuncionario = async () => {
     if (!editingFuncionarioId) return;
     const prev = funcionarios.find(f => f.id === editingFuncionarioId);
     setFuncionarios(funcionarios.map(f => f.id === editingFuncionarioId ? {
@@ -241,7 +266,19 @@ export function Funcionarios() {
       cargo: funcionarioEditForm.cargo,
       salario: parseFloat(funcionarioEditForm.salario) || 0,
       vales: parseFloat(funcionarioEditForm.vales) || 0,
+      categoria: funcionarioEditForm.categoria,
+      modalidade_pagamento: funcionarioEditForm.categoria === 'temporario' ? 'diaria' : 'mensal',
     } : f));
+    try {
+      const { supabase } = await import('../lib/supabaseClient');
+      await supabase.from('funcionarios').update({
+        cargo: funcionarioEditForm.cargo,
+        salario: parseFloat(funcionarioEditForm.salario) || 0,
+        vales: parseFloat(funcionarioEditForm.vales) || 0,
+        categoria: funcionarioEditForm.categoria,
+        modalidade_pagamento: funcionarioEditForm.categoria === 'temporario' ? 'diaria' : 'mensal',
+      }).eq('id', editingFuncionarioId);
+    } catch {}
     // atualizar lcto de salario
     try {
       const LANC_KEY = 'peperaio_lancamentos';
@@ -264,7 +301,7 @@ export function Funcionarios() {
     } catch {}
     setDialogEditFuncionario(false);
     setEditingFuncionarioId(null);
-    setFuncionarioEditForm({ cargo: '', salario: '', vales: '' });
+    setFuncionarioEditForm({ cargo: '', salario: '', vales: '', categoria: 'funcionario' });
     toast.success('Funcionario atualizado!');
   };
 
@@ -296,9 +333,22 @@ export function Funcionarios() {
                 <Input className="rounded-xl" value={funcionarioForm.cargo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioForm({ ...funcionarioForm, cargo: e.target.value })} />
               </div>
               <div>
-                <Label>Salario</Label>
-                <Input type="number" className="rounded-xl" placeholder="R$ 0,00" value={funcionarioForm.salario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioForm({ ...funcionarioForm, salario: e.target.value })} />
+                <Label>Categoria</Label>
+                <Select value={funcionarioForm.categoria} onValueChange={(v: 'dono'|'temporario'|'funcionario') => setFuncionarioForm({ ...funcionarioForm, categoria: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dono">Dono</SelectItem>
+                    <SelectItem value="temporario">Temporário</SelectItem>
+                    <SelectItem value="funcionario">Funcionário</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              {funcionarioForm.categoria !== 'dono' && (
+                <div>
+                  <Label>{funcionarioForm.categoria === 'temporario' ? 'Diária de serviço' : 'Salário'}</Label>
+                  <Input type="number" className="rounded-xl" placeholder="R$ 0,00" value={funcionarioForm.salario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioForm({ ...funcionarioForm, salario: e.target.value })} />
+                </div>
+              )}
               <Button onClick={handleAddFuncionario} className="w-full bg-[#4F6139] hover:bg-[#3e4d2d] rounded-xl">Adicionar</Button>
             </div>
           </DialogContent>
@@ -318,9 +368,11 @@ export function Funcionarios() {
                   <Badge className={funcionario.ativo ? 'bg-[#9DBF7B]' : 'bg-[#B64B3A]'}>
                     {funcionario.ativo ? 'Ativo' : 'Inativo'}
                   </Badge>
-                  <Button variant="ghost" size="icon" onClick={() => startEditFuncionario(funcionario)} className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:hover:bg-accent/50 size-9 rounded-md hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                  <Require roles="admin">
+                    <Button variant="ghost" size="icon" onClick={() => startEditFuncionario(funcionario)} className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:hover:bg-accent/50 size-9 rounded-md hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Require>
                   <Button variant="ghost" size="icon" onClick={() => handleDeleteFuncionario(funcionario.id)} className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:hover:bg-accent/50 size-9 rounded-md hover:bg-[#B64B3A]/10 hover:text-[#B64B3A] transition-all">
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -328,10 +380,12 @@ export function Funcionarios() {
               </div>
 
               <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-t border-[rgba(79,97,57,0.1)]">
-                  <span className="text-sm text-[#626262]">Salario</span>
-                  <span className="text-[#2C2C2C]">R$ {funcionario.salario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                </div>
+                {funcionario.categoria !== 'dono' && (
+                  <div className="flex justify-between items-center py-2 border-t border-[rgba(79,97,57,0.1)]">
+                    <span className="text-sm text-[#626262]">{funcionario.categoria === 'temporario' ? 'Diária de serviço' : 'Salário'}</span>
+                    <span className="text-[#2C2C2C]">R$ {funcionario.salario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center py-2 border-t border-[rgba(79,97,57,0.1)]">
                   <span className="text-sm text-[#626262]">Vales (mes)</span>
                   <span className="text-[#B64B3A]">R$ {funcionario.vales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
@@ -362,9 +416,22 @@ export function Funcionarios() {
               <Input className="rounded-xl" value={funcionarioEditForm.cargo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioEditForm({ ...funcionarioEditForm, cargo: e.target.value })} />
             </div>
             <div>
-              <Label>Salario</Label>
-              <Input type="number" className="rounded-xl" placeholder="R$ 0,00" value={funcionarioEditForm.salario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioEditForm({ ...funcionarioEditForm, salario: e.target.value })} />
+              <Label>Categoria</Label>
+              <Select value={funcionarioEditForm.categoria} onValueChange={(v: 'dono'|'temporario'|'funcionario') => setFuncionarioEditForm({ ...funcionarioEditForm, categoria: v })}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dono">Dono</SelectItem>
+                  <SelectItem value="temporario">Temporário</SelectItem>
+                  <SelectItem value="funcionario">Funcionário</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {funcionarioEditForm.categoria !== 'dono' && (
+              <div>
+                <Label>{funcionarioEditForm.categoria === 'temporario' ? 'Diária de serviço' : 'Salário'}</Label>
+                <Input type="number" className="rounded-xl" placeholder="R$ 0,00" value={funcionarioEditForm.salario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioEditForm({ ...funcionarioEditForm, salario: e.target.value })} />
+              </div>
+            )}
             <div>
               <Label>Vales</Label>
               <Input type="number" className="rounded-xl" placeholder="R$ 0,00" value={funcionarioEditForm.vales} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFuncionarioEditForm({ ...funcionarioEditForm, vales: e.target.value })} />

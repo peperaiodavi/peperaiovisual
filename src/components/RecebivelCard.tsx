@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Receber } from '../hooks/useReceber';
+import { Require } from './Require';
 
 type Props = {
   r: Receber;
@@ -31,9 +32,11 @@ export function RecebivelCard({ r, onEdit, onDelete, onRegister }: Props) {
             onRegister(v);
             el.value = '';
           }} className="bg-[#4F6139] hover:bg-[#3e4d2d] text-white rounded-xl">Registrar</Button>
-          <Button variant="ghost" size="icon" onClick={onEdit}>
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <Require roles="admin">
+            <Button variant="ghost" size="icon" onClick={onEdit}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Require>
           <Button variant="ghost" size="icon" onClick={onDelete}>
             <Trash2 className="h-4 w-4" />
           </Button>

@@ -40,6 +40,8 @@ export function Layout({ children, currentPage, onNavigate, onLogout }: LayoutPr
   const displayName =
     (profile?.name?.trim?.() || profile?.email?.split("@")[0] || "Usuário");
 
+  const filteredMenu = menuItems.filter((item) => item.id !== 'pdf' || profile?.role === 'admin');
+
   return (
     <div className="min-h-screen bg-[#F8F7F4]">
       {/* Topbar */}
@@ -91,7 +93,7 @@ export function Layout({ children, currentPage, onNavigate, onLogout }: LayoutPr
       {/* Sidebar Desktop */}
       <aside className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-[rgba(79,97,57,0.1)] overflow-y-auto">
         <nav className="p-4 space-y-2">
-          {menuItems.map((item) => {
+          {filteredMenu.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             
@@ -134,7 +136,7 @@ export function Layout({ children, currentPage, onNavigate, onLogout }: LayoutPr
               className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-[rgba(79,97,57,0.1)] z-50 overflow-y-auto md:hidden"
             >
               <nav className="p-4 space-y-2">
-                {menuItems.map((item) => {
+                {filteredMenu.map((item) => {
                   const Icon = item.icon;
                   const isActive = currentPage === item.id;
                   

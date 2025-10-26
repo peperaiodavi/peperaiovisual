@@ -4,6 +4,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Pencil, Trash2, CheckCircle2 } from 'lucide-react';
 import { Divida } from '../hooks/useDividas';
+import { Require } from './Require';
 
 type Props = {
   d: Divida;
@@ -41,9 +42,11 @@ export function DividaCard({ d, onEdit, onDelete, onTogglePaid }: Props) {
             <CheckCircle2 className="h-4 w-4" />
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={onEdit} className="hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <Require roles="admin">
+            <Button variant="ghost" size="icon" onClick={onEdit} className="hover:bg-[#9DBF7B]/10 hover:text-[#4F6139] hover:rotate-6 transition-all">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Require>
           <Button variant="ghost" size="icon" onClick={onDelete} className="hover:bg-[#B64B3A]/10 hover:text-[#B64B3A] transition-all">
             <Trash2 className="h-4 w-4" />
           </Button>

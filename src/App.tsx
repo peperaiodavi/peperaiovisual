@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
@@ -6,8 +6,9 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Funcionarios } from './components/Funcionarios';
 import { Equipes } from './components/Equipes';
-import { ControleFinanceiro } from './components/ControleFinanceiro';
-import AutomacaoPDF2 from './components/AutomacaoPDF2';
+// Lazy-load telas pesadas
+const ControleFinanceiro = React.lazy(() => import('./components/ControleFinanceiro').then(m => ({ default: m.ControleFinanceiro })));
+const AutomacaoPDF2 = React.lazy(() => import('./components/AutomacaoPDF2'));
 import { MinhaConta } from './components/MinhaConta';
 import { supabase } from './lib/supabaseClient';
 import { useAuthCtx } from './auth';
@@ -41,9 +42,18 @@ export default function App() {
       case 'equipes':
         return <Equipes />;
       case 'financeiro':
-        return <ControleFinanceiro />;
+        return (
+          <Suspense fallback={<div style={{ padding: 24, color: '#626262' }}>Carregando Financeiro…</div>}>
+            <ControleFinanceiro />
+          </Suspense>
+        );
       case 'pdf':
-        return <AutomacaoPDF2 />;
+        if (profile?.role !== 'admin') return <div style={{ padding: 24, color: '#626262' }}>Acesso negado</div>;
+        return (
+          <Suspense fallback={<div style={{ padding: 24, color: '#626262' }}>Carregando PDF…</div>}>
+            <AutomacaoPDF2 />
+          </Suspense>
+        );
       case 'conta':
         return <MinhaConta />;
       default:

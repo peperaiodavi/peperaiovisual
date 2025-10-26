@@ -9,29 +9,24 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Badge } from './ui/badge'
 import { Avatar, AvatarFallback } from './ui/avatar'
-import useLancamentos from '../hooks/useLancamentos'
-import { useFinanceiro } from '../financeiro/useFinanceiro'
+import { useFinanceiro, ensureFinanceObraId } from '../financeiro/useFinanceiro'
 import { Require } from './Require'
-import { isoToPtBr, ptBrToIso, safeToIso } from '../utils/date'
+import { isoToPtBr, safeToIso } from '../utils/date'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog'
+import useEquipesObras, { type ObraEquipe as ObraEquipeHookType } from '../hooks/useEquipesObras'
+import useFuncionarios from '../hooks/useFuncionarios'
 
 interface Despesa { id: string; nome: string; valor: number; data: string }
-interface ObraEquipe {
-  id: string
-  nome: string // cidade
-  obra: string // nome da obra
-  membros: string[]
-  custos: number // orçamento inicial
-  status: 'ativo' | 'concluido'
-  despesas?: Despesa[]
-}
+type ObraEquipe = ObraEquipeHookType
 
 
 export function Equipes() {
-  const [obras, setObras] = useState<ObraEquipe[]>([])
+  // Fonte única: hook com Supabase (sem localStorage)
+  const { equipesObras: obras, setEquipesObras: setObras } = useEquipesObras()
   const [dialogObra, setDialogObra] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [obraForm, setObraForm] = useState({ nome: '', obra: '', custos: '' })
-  const [funcionariosList, setFuncionariosList] = useState<{ id: string; nome: string }[]>([])
+  const { funcionarios } = useFuncionarios()
   const [selectedMembros, setSelectedMembros] = useState<string[]>([])
   const [editedDespesas, setEditedDespesas] = useState<Despesa[]>([])
   const [expandedObras, setExpandedObras] = useState<Record<string, boolean>>({})
@@ -41,32 +36,13 @@ export function Equipes() {
   const [despesaForm, setDespesaForm] = useState({ nome: '', valor: '', data: '' })
   const [editingDespesa, setEditingDespesa] = useState<{ obraId: string; despesaId: string } | null>(null)
 
-  useEffect(() => {
-    const stored = localStorage.getItem('peperaio_equipes')
-    if (stored) {
-      try { setObras(JSON.parse(stored)) } catch {}
-    } else {
-      const initial: ObraEquipe[] = [
-        { id: '1', nome: 'São Paulo', obra: 'Shopping Center - Fachada', membros: ['João Silva'], custos: 15600, status: 'ativo', despesas: [] },
-      ]
-      setObras(initial)
-      localStorage.setItem('peperaio_equipes', JSON.stringify(initial))
-    }
-  }, [])
+  // Helpers
 
-  useEffect(() => {
-    const storedF = localStorage.getItem('peperaio_funcionarios')
-    if (storedF) {
-      try {
-        const arr = JSON.parse(storedF) as Array<{ id: string; nome: string }>
-        setFuncionariosList(arr.map((f) => ({ id: f.id, nome: f.nome })))
-      } catch {}
-    }
-  }, [])
+  // Removido: carregamento/persistência localStorage — agora por Supabase via hook
 
-  useEffect(() => {
-    localStorage.setItem('peperaio_equipes', JSON.stringify(obras))
-  }, [obras])
+  // Funcionários agora vêm do Supabase via hook
+
+  // Removido: persistência/dispatch local — hook já publica via realtime
 
   const openNovaObra = () => {
     setEditingId(null)
@@ -91,13 +67,12 @@ export function Equipes() {
     setEditedDespesas((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleSalvarObra = () => {
+  const handleSalvarObra = async () => {
     const cidade = obraForm.nome.trim()
     const nomeObra = obraForm.obra.trim()
     const custosNum = Number(obraForm.custos)
-    if (!cidade || !nomeObra || !obraForm.custos) return toast.error('Preencha Cidade, Nome da Obra e Orçamento.')
-    if (isNaN(custosNum) || custosNum <= 0) return toast.error('Informe um orçamento válido (maior que zero).')
-    if (selectedMembros.length === 0) return toast.error('Selecione pelo menos um membro.')
+  if (!cidade || !nomeObra || !obraForm.custos) return toast.error('Preencha Cidade, Nome da Obra e Orçamento.')
+  if (isNaN(custosNum) || custosNum <= 0) return toast.error('Informe um orçamento válido (maior que zero).')
 
     if (editingId) {
       setObras((prev) => prev.map((e) => (
@@ -105,10 +80,14 @@ export function Equipes() {
           ? { ...e, nome: cidade, obra: nomeObra, membros: selectedMembros, custos: custosNum, despesas: editedDespesas }
           : e
       )))
+      // Espelha imediatamente no financeiro (status 'ativo')
+      try { await ensureFinanceObraId(editingId, nomeObra); } catch {}
       toast.success('Obra atualizada com sucesso!')
     } else {
       const nova: ObraEquipe = { id: Date.now().toString(), nome: cidade, obra: nomeObra, membros: selectedMembros, custos: custosNum, status: 'ativo', despesas: [] }
       setObras((prev) => [...prev, nova])
+      // Garante vínculo no financeiro (await para não haver delay perceptível na aba Obras)
+      try { await ensureFinanceObraId(nova.id, nomeObra); } catch {}
       toast.success('Obra cadastrada com sucesso!')
     }
     setDialogObra(false)
@@ -119,35 +98,50 @@ export function Equipes() {
     toast.success('Obra removida com sucesso!')
   }
 
-  const { addLancamento } = useLancamentos()
-  const { addLancamento: finAddLanc } = useFinanceiro();
+  const { db: finDB, addLancamento: finAddLanc, atualizarObra: finAtualizarObra } = useFinanceiro();
 
-  const finalizarObra = (id: string) => {
-    setObras((prev) => {
-      const obra = prev.find((e) => e.id === id)
-      if (obra) {
-        const totalDespesas = (obra.despesas || []).reduce((s, d) => s + (Number(d.valor) || 0), 0)
-        const restante = (obra.custos || 0) - totalDespesas
-        if (restante > 0) {
-          try {
-            addLancamento({
-              id: `${Date.now().toString()}_saldo_obra`,
-              data: new Date().toLocaleDateString('pt-BR'),
-              tipo: 'entrada',
-              categoria: `Saldo Obra: ${obra.obra}`,
-              valor: restante,
-              obra: obra.obra,
-              status: 'Confirmado',
-            })
-          } catch (e) {
-            // se falhar, não bloqueia a finalização; log opcional
-            console.error('Erro ao registrar lançamento de saldo da obra', e)
-          }
-        }
-      }
-      return prev.map((e) => (e.id === id ? { ...e, status: 'concluido' } : e))
-    })
-    toast.success('Obra finalizada com sucesso!')
+  // ensureFinanceObraId agora é importado do módulo financeiro (centralizado)
+
+  const finalizarObra = async (id: string) => {
+    const obra = obras.find((e) => e.id === id)
+    if (!obra) return
+    const dataPt = new Date().toLocaleDateString('pt-BR')
+    const totalDespesas = (obra.despesas || []).reduce((s, d) => s + (Number(d.valor) || 0), 0)
+    const receitaOrcada = Number(obra.custos || 0)
+    const restante = Math.max(0, receitaOrcada - totalDespesas)
+
+    if (restante > 0) {
+      // 1) Entrada no CAIXA (soma no saldo)
+      try {
+        await finAddLanc({
+          id: `${Date.now()}_caixa_final_${id}`,
+          data: dataPt,
+          tipo: 'entrada',
+          valor: restante,
+          descricao: `Fechamento de Obra - ${obra.obra}`,
+          escopo: 'caixa',
+          contabilizaCaixa: true,
+        } as any)
+      } catch {}
+      // 2) Registro na aba Obras (não soma no saldo)
+      try {
+        const finObraId = await ensureFinanceObraId(obra.id, obra.obra)
+        await finAddLanc({
+          id: `${Date.now()}_obra_final_${id}`,
+          data: dataPt,
+          tipo: 'entrada',
+          valor: restante,
+          descricao: `Fechamento de Obra - ${obra.obra}`,
+          obraId: finObraId,
+          escopo: 'obra',
+          contabilizaCaixa: false,
+        } as any)
+        try { await finAtualizarObra(finObraId, { status: 'finalizada', nome: obra.obra } as any) } catch {}
+      } catch {}
+    }
+
+    toast.success('Obra finalizada: valor lançado no CAIXA e registrado na aba Obras.')
+    setObras((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'concluido' } : e)))
   }
 
   // Despesas
@@ -164,7 +158,7 @@ export function Equipes() {
   }
 
   // Salvar (adicionar ou editar) despesa no dialogo
-  const handleSalvarDespesa = () => {
+  const handleSalvarDespesa = async () => {
     if (!dialogDespesaObraId) return
     const nome = despesaForm.nome.trim()
     const valorNum = Number(despesaForm.valor)
@@ -188,11 +182,9 @@ export function Equipes() {
       toast.success('Despesa adicionada.')
       // Registrar também no financeiro como SAÍDA diária (escopo 'obra'), sem afetar caixas/cards
       try {
-        const MAP_KEY = 'peperaio_financeiro_obramap_v1';
-        const map = JSON.parse(localStorage.getItem(MAP_KEY) || '{}') as Record<string,string>;
-        const finObraId = map[dialogDespesaObraId] || undefined;
+        const finObraId = dialogDespesaObraId ? `fin_${dialogDespesaObraId}` : undefined;
         const authUser = (() => { try { return JSON.parse(localStorage.getItem('peperaio_auth_user')||'null'); } catch { return null; } })();
-        finAddLanc({
+        await finAddLanc({
           id: Date.now().toString(),
           data, // dd/mm/aaaa
           tipo: 'saida',
@@ -225,23 +217,7 @@ export function Equipes() {
     toast.success('Despesa removida.')
   }
 
-  const handleAddDespesa = () => {
-    if (!dialogDespesaObraId) return
-    const nome = despesaForm.nome.trim()
-    const valorNum = Number(despesaForm.valor)
-    const dataIso = despesaForm.data.trim()
-    const data = dataIso ? isoToPtBr(dataIso) : new Date().toLocaleDateString('pt-BR')
-    if (!nome) return toast.error('Informe o nome da despesa.')
-    if (!valorNum || isNaN(valorNum) || valorNum <= 0) return toast.error('Informe um valor válido.')
-    setObras((prev) => prev.map((e) => (
-      e.id === dialogDespesaObraId
-        ? { ...e, despesas: [...(e.despesas || []), { id: Date.now().toString(), nome, valor: valorNum, data }] }
-        : e
-    )))
-    setDialogDespesaObraId(null)
-    setDespesaForm({ nome: '', valor: '', data: '' })
-    toast.success('Despesa adicionada à obra.')
-  }
+  // (removido) handleAddDespesa redundante
 
   return (
     <div className="space-y-6">
@@ -259,7 +235,7 @@ export function Equipes() {
           <DialogContent className="rounded-[20px]">
             <DialogHeader>
               <DialogTitle className="text-center">{editingId ? 'Editar Obra' : 'Nova Obra'}</DialogTitle>
-              <DialogDescription className="text-center">Preencha os dados da obra e selecione os membros da equipe.</DialogDescription>
+              <DialogDescription className="text-center">Preencha os dados da obra. A seleção de membros é opcional.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -267,10 +243,10 @@ export function Equipes() {
                 <Input className="rounded-xl" value={obraForm.nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setObraForm({ ...obraForm, nome: e.target.value })} />
               </div>
               <div>
-                <Label>Selecione os Membros</Label>
+                <Label>Selecione os Membros (opcional)</Label>
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-auto rounded-xl border border-[rgba(79,97,57,0.2)] bg-[#FAFBF7] px-4 py-3">
-                  {funcionariosList.length === 0 && <span className="text-sm text-[#626262]">Nenhum funcionário cadastrado</span>}
-                  {funcionariosList.map((f) => {
+                  {funcionarios.length === 0 && <span className="text-sm text-[#626262]">Nenhum funcionário cadastrado (opcional)</span>}
+                  {funcionarios.map((f) => {
                     const checked = selectedMembros.includes(f.nome)
                     return (
                       <label key={f.id} className={`flex items-center gap-2 text-sm leading-none font-medium select-none rounded-full px-3 py-2 transition-colors duration-300 cursor-pointer ${checked ? 'bg-[#9DBF7B]/10 text-[#4F6139]' : 'hover:bg-[#9DBF7B]/5'}`}>
@@ -329,15 +305,29 @@ export function Equipes() {
             <motion.div key={equipe.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}>
               <Card onClick={() => setExpandedObras((s) => ({ ...s, [equipe.id]: !s[equipe.id] }))} className="text-card-foreground flex flex-col gap-6 border p-6 bg-white rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.1)] transition-all cursor-pointer relative">
                 <div className="absolute top-4 right-4 flex gap-2">
-                  <Require nivel={2}>
+                  <Require roles="admin">
                     <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); startEditObra(equipe) }} className="rounded-xl border-[rgba(79,97,57,0.2)] hover:bg-[#9DBF7B]/10 hover:border-[#4F6139] transition-all">
                       <Pencil className="h-4 w-4 text-[#4F6139]" />
                     </Button>
                   </Require>
-                  <Require nivel={2}>
-                    <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); removerObra(equipe.id) }} className="rounded-xl border-[rgba(182,75,58,0.2)] hover:bg-[#B64B3A]/10 hover:border-[#B64B3A] transition-all">
-                      <Trash2 className="h-4 w-4 text-[#B64B3A]" />
-                    </Button>
+                  <Require roles="admin">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); }} className="rounded-xl border-[rgba(182,75,58,0.2)] hover:bg-[#B64B3A]/10 hover:border-[#B64B3A] transition-all">
+                          <Trash2 className="h-4 w-4 text-[#B64B3A]" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="rounded-[16px]">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remover obra?</AlertDialogTitle>
+                          <AlertDialogDescription>Esta ação não pode ser desfeita. Deseja continuar?</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction className="bg-[#B64B3A] hover:bg-[#9a3f31]" onClick={() => removerObra(equipe.id)}>Remover</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </Require>
                 </div>
 
@@ -381,9 +371,11 @@ export function Equipes() {
                           <span className="text-sm text-[#2C2C2C]">{d.data} - {d.nome}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-[#B64B3A]">- R$ {Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); openEditarDespesa(equipe.id, d) }} className="size-9 rounded-xl border-[rgba(79,97,57,0.2)] hover:bg-[#9DBF7B]/10 hover:border-[#4F6139] transition-all">
-                              <Pencil className="h-4 w-4 text-[#4F6139]" />
-                            </Button>
+                            <Require roles="admin">
+                              <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); openEditarDespesa(equipe.id, d) }} className="size-9 rounded-xl border-[rgba(79,97,57,0.2)] hover:bg-[#9DBF7B]/10 hover:border-[#4F6139] transition-all">
+                                <Pencil className="h-4 w-4 text-[#4F6139]" />
+                              </Button>
+                            </Require>
                             <Button variant="outline" size="icon" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); excluirDespesa(equipe.id, d.id) }} className="size-9 rounded-xl border-[rgba(182,75,58,0.2)] hover:bg-[#B64B3A]/10 hover:border-[#B64B3A] transition-all">
                               <Trash2 className="h-4 w-4 text-[#B64B3A]" />
                             </Button>
@@ -405,7 +397,7 @@ export function Equipes() {
                           Cadastrar Despesa
                         </Button>
                       </Require>
-                      <Require nivel={2}>
+                      <Require roles="admin">
                         <Button
                           onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); finalizarObra(equipe.id) }}
                           className="flex-1 bg-[#9DBF7B] hover:bg-[#8aae6a] text-white rounded-xl transition-all hover:scale-105"

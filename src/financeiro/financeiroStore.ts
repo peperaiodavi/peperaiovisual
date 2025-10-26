@@ -21,7 +21,7 @@ export type Lancamento = {
 export type ObraFin = {
 	id: string;
 	nome: string;
-	status?: 'ativa' | 'finalizada';
+	status?: 'ativo' | 'finalizada';
 };
 
 export type FinanceiroDB = {

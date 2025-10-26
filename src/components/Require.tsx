@@ -1,10 +1,12 @@
 import React from 'react';
 import { useAuthCtx } from '../auth';
+import type { UserRole } from '../lib/profile';
 
 type RequireProps = {
 	children: React.ReactNode;
-	perm?: string; // tag de permissão (ex: 'registrar', 'exportar')
-	nivel?: number; // nível mínimo (ex: 2)
+	perm?: string; // legado: 'exportar', etc.; 'admin' será mapeado para role admin
+	nivel?: number; // legado: nível mínimo (sem uso com Supabase profile)
+	roles?: UserRole | UserRole[]; // roles aceitas (ex: 'admin')
 };
 
 type AuthUser = {
@@ -19,7 +21,7 @@ function getAuthUser(): AuthUser {
 	try { return JSON.parse(localStorage.getItem('peperaio_auth_user') || 'null'); } catch { return null; }
 }
 
-export function Require({ children, perm, nivel }: RequireProps) {
+export function Require({ children, perm, nivel, roles }: RequireProps) {
 	const { profile } = useAuthCtx();
 	const [user, setUser] = React.useState<AuthUser>(() => getAuthUser());
 
@@ -31,8 +33,18 @@ export function Require({ children, perm, nivel }: RequireProps) {
 		return () => { window.removeEventListener('storage', onStorage); window.removeEventListener('focus', sync); };
 	}, []);
 
-	// Prioridade ao contexto: se há profile autenticado, libera imediatamente
-	if (profile) return <>{children}</>;
+	// Se há profile (Supabase), aplicamos regras de role
+	if (profile) {
+		// roles explícitas
+		if (roles) {
+			const allowed = Array.isArray(roles) ? roles : [roles];
+			if (!allowed.includes(profile.role)) return null;
+		}
+		// mapeia perm='admin' para role admin
+		if (perm === 'admin' && profile.role !== 'admin') return null;
+		// nível (legado) ignorado quando usamos profile (sem mapeamento de níveis)
+		return <>{children}</>;
+	}
 
 	if (!perm && !nivel) return <>{children}</>;
 	if (!user) return null;

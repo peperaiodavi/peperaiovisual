@@ -370,7 +370,7 @@ export function Dashboard() {
                           })()}
                           <Button
                             variant="outline"
-                            onClick={()=>{
+                            onClick={async () =>{
                               const v = Number(gastoInline[o.id] ?? 0);
                               if(v>0){
                                 const desc = (gastoDescInline[o.id] ?? '').trim();
@@ -383,7 +383,7 @@ export function Dashboard() {
                                 try {
                                   // tenta mapear obra para o store financeiro pela descrição/nome
                                   const obraFin = (finDB?.obras || []).find((of:any) => of?.nome === o.obra);
-                                  finAddLanc({
+                                  await finAddLanc({
                                     id: `${Date.now().toString()}_desp_obra`,
                                     data: hoje,
                                     tipo: 'saida',
