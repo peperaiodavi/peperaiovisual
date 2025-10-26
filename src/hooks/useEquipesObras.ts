@@ -119,16 +119,16 @@ export default function useEquipesObras() {
         const uid = udata?.user?.id;
         if (!uid) return;
 
-        const prevMap = new Map<string, ObraEquipe>(prev.map(o => [o.id, o]));
-        const nextMap = new Map<string, ObraEquipe>(next.map(o => [o.id, o]));
+  const prevMap = new Map<string, ObraEquipe>(prev.map((o: ObraEquipe) => [o.id, o] as [string, ObraEquipe]));
+  const nextMap = new Map<string, ObraEquipe>(next.map((o: ObraEquipe) => [o.id, o] as [string, ObraEquipe]));
 
         // Obras a upsertar (novas ou alteradas)
-        const toUpsertObras = next.filter(o => {
+        const toUpsertObras = next.filter((o: ObraEquipe) => {
           const p = prevMap.get(o.id);
           if (!p) return true;
           const membrosChanged = JSON.stringify(p.membros || []) !== JSON.stringify(o.membros || []);
           return p.nome !== o.nome || p.obra !== o.obra || p.custos !== o.custos || p.status !== o.status || membrosChanged;
-        }).map(o => ({ id: o.id, owner_id: uid, nome: o.nome, obra: o.obra, membros: o.membros, custos: o.custos, status: o.status, deleted_at: null }));
+        }).map((o: ObraEquipe) => ({ id: o.id, owner_id: uid, nome: o.nome, obra: o.obra, membros: o.membros, custos: o.custos, status: o.status, deleted_at: null }));
 
         if (toUpsertObras.length > 0) {
           const { error } = await supabase.from('equipes_obras').upsert(toUpsertObras, { onConflict: 'id,owner_id' });
@@ -144,9 +144,9 @@ export default function useEquipesObras() {
         // Despesas: diff por ID (evita upsert de tudo)
         type RowDesp = { id: string; owner_id: string; obra_id: string; nome: string; valor: number; data: string; deleted_at: null };
         const prevDesp = new Map<string, { obra_id: string; nome: string; valor: number; data: string }>();
-        prev.forEach(o => (o.despesas || []).forEach(d => prevDesp.set(d.id, { obra_id: o.id, nome: d.nome, valor: d.valor, data: d.data })));
+  prev.forEach((o: ObraEquipe) => (o.despesas || []).forEach((d: DespesaEquipe) => prevDesp.set(d.id, { obra_id: o.id, nome: d.nome, valor: d.valor, data: d.data })));
         const nextDesp = new Map<string, { obra_id: string; nome: string; valor: number; data: string }>();
-        next.forEach(o => (o.despesas || []).forEach(d => nextDesp.set(d.id, { obra_id: o.id, nome: d.nome, valor: d.valor, data: d.data })));
+  next.forEach((o: ObraEquipe) => (o.despesas || []).forEach((d: DespesaEquipe) => nextDesp.set(d.id, { obra_id: o.id, nome: d.nome, valor: d.valor, data: d.data })));
 
         const toUpsertDesp: RowDesp[] = [];
         nextDesp.forEach((n, id) => {

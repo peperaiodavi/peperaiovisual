@@ -80,14 +80,20 @@ export function Equipes() {
           ? { ...e, nome: cidade, obra: nomeObra, membros: selectedMembros, custos: custosNum, despesas: editedDespesas }
           : e
       )))
-      // Espelha imediatamente no financeiro (status 'ativo')
-      try { await ensureFinanceObraId(editingId, nomeObra); } catch {}
+      // Upsert + atualização de estado local (aparece na hora)
+      try {
+        const finId = `fin_${editingId}`
+        await finAtualizarObra(finId, { id: finId, nome: nomeObra, status: 'ativo' } as any)
+      } catch {}
       toast.success('Obra atualizada com sucesso!')
     } else {
       const nova: ObraEquipe = { id: Date.now().toString(), nome: cidade, obra: nomeObra, membros: selectedMembros, custos: custosNum, status: 'ativo', despesas: [] }
       setObras((prev) => [...prev, nova])
-      // Garante vínculo no financeiro (await para não haver delay perceptível na aba Obras)
-      try { await ensureFinanceObraId(nova.id, nomeObra); } catch {}
+      // Upsert + atualização de estado local (aparece na hora)
+      try {
+        const finId = `fin_${nova.id}`
+        await finAtualizarObra(finId, { id: finId, nome: nomeObra, status: 'ativo' } as any)
+      } catch {}
       toast.success('Obra cadastrada com sucesso!')
     }
     setDialogObra(false)
@@ -242,29 +248,31 @@ export function Equipes() {
                 <Label>Cidade</Label>
                 <Input className="rounded-xl" value={obraForm.nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setObraForm({ ...obraForm, nome: e.target.value })} />
               </div>
-              <div>
-                <Label>Selecione os Membros (opcional)</Label>
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-auto rounded-xl border border-[rgba(79,97,57,0.2)] bg-[#FAFBF7] px-4 py-3">
-                  {funcionarios.length === 0 && <span className="text-sm text-[#626262]">Nenhum funcionário cadastrado (opcional)</span>}
-                  {funcionarios.map((f) => {
-                    const checked = selectedMembros.includes(f.nome)
-                    return (
-                      <label key={f.id} className={`flex items-center gap-2 text-sm leading-none font-medium select-none rounded-full px-3 py-2 transition-colors duration-300 cursor-pointer ${checked ? 'bg-[#9DBF7B]/10 text-[#4F6139]' : 'hover:bg-[#9DBF7B]/5'}`}>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded-full border border-[#4F6139]/30 bg-white appearance-none checked:bg-[#4F6139] checked:border-[#4F6139] transition-colors duration-200"
-                          checked={checked}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            if (e.target.checked) setSelectedMembros((m) => [...m, f.nome])
-                            else setSelectedMembros((m) => m.filter((n) => n !== f.nome))
-                          }}
-                        />
-                        {f.nome}
-                      </label>
-                    )
-                  })}
+              {editingId && (
+                <div>
+                  <Label>Selecione os Membros (opcional)</Label>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-auto rounded-xl border border-[rgba(79,97,57,0.2)] bg-[#FAFBF7] px-4 py-3">
+                    {funcionarios.length === 0 && <span className="text-sm text-[#626262]">Nenhum funcionário cadastrado (opcional)</span>}
+                    {funcionarios.map((f) => {
+                      const checked = selectedMembros.includes(f.nome)
+                      return (
+                        <label key={f.id} className={`flex items-center gap-2 text-sm leading-none font-medium select-none rounded-full px-3 py-2 transition-colors duration-300 cursor-pointer ${checked ? 'bg-[#9DBF7B]/10 text-[#4F6139]' : 'hover:bg-[#9DBF7B]/5'}`}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded-full border border-[#4F6139]/30 bg-white appearance-none checked:bg-[#4F6139] checked:border-[#4F6139] transition-colors duration-200"
+                            checked={checked}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              if (e.target.checked) setSelectedMembros((m) => [...m, f.nome])
+                              else setSelectedMembros((m) => m.filter((n) => n !== f.nome))
+                            }}
+                          />
+                          {f.nome}
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <Label>Nome da Obra</Label>
                 <Input className="rounded-xl" value={obraForm.obra} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setObraForm({ ...obraForm, obra: e.target.value })} />

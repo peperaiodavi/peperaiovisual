@@ -64,6 +64,17 @@ export function ControleFinanceiro() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [equipesObras]);
   const [parceladas, setParceladas] = useState<Parcelada[]>([]);
+  // Filtro Obras (Ativas | Finalizadas | Todas)
+  const [obrasFiltro, setObrasFiltro] = useState<'ativas' | 'finalizadas' | 'todas'>(() => {
+    const saved = localStorage.getItem('peperaio_fin_obras_filtro');
+    return (saved === 'finalizadas' || saved === 'todas') ? saved : 'ativas';
+  });
+  useEffect(() => { try { localStorage.setItem('peperaio_fin_obras_filtro', obrasFiltro); } catch {} }, [obrasFiltro]);
+  const obrasFiltradas = React.useMemo(() => {
+    if (obrasFiltro === 'todas') return [...equipesObras];
+    const status = obrasFiltro === 'ativas' ? 'ativo' : 'concluido';
+    return [...equipesObras].filter(o => (o.status ?? 'ativo') === status);
+  }, [obrasFiltro, equipesObras]);
   // Diálogo de ajuste apenas do Saldo em Caixa
   const [dialogSaldoOpen, setDialogSaldoOpen] = useState(false);
   const [saldoNovo, setSaldoNovo] = useState('');
@@ -1436,39 +1447,44 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
           >
             <div className="flex items-center justify-between">
               <div className="text-sm text-[#626262]">Relatório de despesas por obra - mês: {selectedMonth}</div>
-              <Button
-                variant="outline"
-                className="rounded-xl"
-                onClick={() => {
-                  const rows: string[] = ['obra;data;descricao;valor'];
-                  equipesObras.forEach((obra) => {
-                    (obra.despesas || []).forEach((d) => {
-                      if (monthKeyFromDate(d.data) === selectedMonth) {
-                        const valor = String(Number(d.valor) || 0).replace('.', ',');
-                        rows.push(`${obra.obra};${d.data};${(d.nome || '').replaceAll(';', ',')};${valor}`);
-                      }
+              <div className="flex items-center gap-2">
+                <Button variant={obrasFiltro === 'ativas' ? 'default' : 'outline'} className="rounded-xl" onClick={() => setObrasFiltro('ativas')}>Ativas</Button>
+                <Button variant={obrasFiltro === 'finalizadas' ? 'default' : 'outline'} className="rounded-xl" onClick={() => setObrasFiltro('finalizadas')}>Finalizadas</Button>
+                <Button variant={obrasFiltro === 'todas' ? 'default' : 'outline'} className="rounded-xl" onClick={() => setObrasFiltro('todas')}>Todas</Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => {
+                    const rows: string[] = ['obra;data;descricao;valor'];
+                    equipesObras.forEach((obra) => {
+                      (obra.despesas || []).forEach((d) => {
+                        if (monthKeyFromDate(d.data) === selectedMonth) {
+                          const valor = String(Number(d.valor) || 0).replace('.', ',');
+                          rows.push(`${obra.obra};${d.data};${(d.nome || '').replaceAll(';', ',')};${valor}`);
+                        }
+                      });
                     });
-                  });
-                  const csv = rows.join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `despesas_${selectedMonth}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-              >Exportar CSV (mês)</Button>
+                    const csv = rows.join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `despesas_${selectedMonth}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >Exportar CSV (mês)</Button>
+              </div>
             </div>
             <div className="grid gap-4">
-              {equipesObras.length === 0 && (
+              {obrasFiltradas.length === 0 && (
                 <Card className="p-6 bg-white rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
                   <div className="text-sm text-[#626262]">
-                    Nenhuma obra encontrada. Cadastre novas obras em Dashboard &gt; Obras/Equipes.
+                    {obrasFiltro === 'finalizadas' ? 'Nenhuma obra finalizada.' : (obrasFiltro === 'ativas' ? 'Nenhuma obra ativa.' : 'Nenhuma obra encontrada.')} Cadastre novas obras em Dashboard &gt; Obras/Equipes.
                   </div>
                 </Card>
               )}
-              {[...equipesObras].map((obra) => {
+              {obrasFiltradas.map((obra) => {
                 const totalDespesas = (obra.despesas || []).reduce((s, d) => s + (Number(d.valor) || 0), 0);
                 const restante = (obra.custos || 0) - totalDespesas;
                 return (
@@ -1535,6 +1551,7 @@ const { receber, addReceber, updateReceber, deleteReceber, registerPayment, clea
                 );
               })}
             </div>
+            
             {/* Dialog legacy removido para evitar warnings de acessibilidade do Radix */}
           </motion.div>
         </TabsContent>
